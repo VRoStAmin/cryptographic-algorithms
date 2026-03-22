@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "prngstream.h"
 
-void explain_usage() {
+void prngstream_explain_usage() {
     printf(
         "Your input was incorrect. Please use the following format:\n"
         "To encrypt using XOR stream cipher: ./prngstream encrypt \"plaintext\" seed\n"
@@ -11,19 +12,21 @@ void explain_usage() {
     );
 }
 
+/* Function that converts a seed from the command line into an int. */
 int convert_to_seed_integer(char *seed_string) {
     char *endptr;
     long seed_val = strtol(seed_string, &endptr, 10);
 
     if (endptr == seed_string || *endptr != '\0' || seed_val < 0) {
         printf("Invalid seed...\n\n");
-        explain_usage();
+        prngstream_explain_usage();
         return -1;
     }
 
     return (int)seed_val;
 }
 
+/* Function that does encryption or decryption using the xor stream cipher and a seed. */
 void xor_stream_cipher(const unsigned char *input, size_t n, unsigned char *output, unsigned int seed) {
     size_t i;
     srand(seed);
@@ -33,8 +36,8 @@ void xor_stream_cipher(const unsigned char *input, size_t n, unsigned char *outp
         output[i] = input[i] ^ keystream_byte;
     }
 }
-
-void print_hex(const unsigned char *buffer, size_t n) {
+/* Prints as hex */
+void prngstream_print_hex(const unsigned char *buffer, size_t n) {
     size_t i;
     for (i = 0; i < n; i++) {
         printf("%02x", buffer[i]);
@@ -42,14 +45,16 @@ void print_hex(const unsigned char *buffer, size_t n) {
     printf("\n");
 }
 
-int hex_value(char c) {
+/* Function for converting a hexadecimal character into its integer value. */
+int prngstream_hex_value(char c) {
     if (c >= '0' && c <= '9') { return c - '0'; }
     if (c >= 'a' && c <= 'f') { return c - 'a' + 10; }
     if (c >= 'A' && c <= 'F') { return c - 'A' + 10; }
     return -1;
 }
 
-unsigned char *hex_to_bytes(const char *hex_string) {
+/* Function that converts a hex string into a hex stream.*/
+unsigned char *prngstream_hex_to_bytes(const char *hex_string) {
     size_t n = strlen(hex_string);
     if (n % 2 != 0) {
         return NULL;
@@ -63,8 +68,8 @@ unsigned char *hex_to_bytes(const char *hex_string) {
 
     size_t i;
     for (i = 0; i < n; i += 2) {
-        int first = hex_value(hex_string[i]);
-        int second = hex_value(hex_string[i + 1]);
+        int first = prngstream_hex_value(hex_string[i]);
+        int second = prngstream_hex_value(hex_string[i + 1]);
 
         if (first < 0 || second < 0) {
             free(output);
@@ -77,6 +82,7 @@ unsigned char *hex_to_bytes(const char *hex_string) {
     return output;
 }
 
+/* Demo that shows why reusing the same key is dangerous. */
 void reuse_seed_demo() {
     const unsigned char *plaintext1 = (const unsigned char *)"attack at dawn";
     const unsigned char *plaintext2 = (const unsigned char *)"attack at dusk";
@@ -106,23 +112,20 @@ void reuse_seed_demo() {
         plain_xor[i] = plaintext1[i] ^ plaintext2[i];
     }
 
-    printf("Demonstration of seed reuse danger\n");
+    printf("Why reusing the same seed is dangerous... \n");
     printf("Seed used: %u\n\n", seed);
 
     printf("Plaintext 1:\n%s\n", plaintext1);
     printf("Plaintext 2:\n%s\n\n", plaintext2);
 
     printf("Ciphertext 1 (hex):\n");
-    print_hex(ciphertext1, n);
+    prngstream_print_hex(ciphertext1, n);
 
     printf("Ciphertext 2 (hex):\n");
-    print_hex(ciphertext2, n);
+    prngstream_print_hex(ciphertext2, n);
 
     printf("Ciphertext1 XOR Ciphertext2 (hex):\n");
-    print_hex(cipher_xor, n);
-
-    printf("Plaintext1 XOR Plaintext2 (hex):\n");
-    print_hex(plain_xor, n);
+    prngstream_print_hex(cipher_xor, n);
 
     free(ciphertext1);
     free(ciphertext2);
@@ -130,75 +133,53 @@ void reuse_seed_demo() {
     free(plain_xor);
 }
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        explain_usage();
-        return 1;
+void prngstream_encrypt_demo(const char *plaintext_str, int seed) {
+    const unsigned char *plaintext = (const unsigned char *)plaintext_str;
+    size_t n = strlen(plaintext_str);
+    unsigned char *ciphertext = malloc(n);
+    if (ciphertext == NULL) {
+        printf("Allocation error\n");
+        return;
     }
 
-    if (strcmp(argv[1], "encrypt") == 0 && argc == 4) {
-        const unsigned char *plaintext = (const unsigned char *)argv[2];
-        int seed = convert_to_seed_integer(argv[3]) ;
-        if (seed == -1) {
-            return 1;
-        }
+    xor_stream_cipher(plaintext, n, ciphertext, (unsigned int)seed);
 
-        size_t n = strlen((const char *)plaintext);
-        unsigned char *ciphertext = malloc(n);
-        if (ciphertext == NULL) {
-            printf("Allocation error\n");
-            return 1;
-        }
+    printf("Plaintext Input:\n");
+    printf("%s\n", plaintext);
+    printf("Ciphertext Output (hex) with seed [%d]:\n", seed);
+    prngstream_print_hex(ciphertext, n);
 
-        xor_stream_cipher(plaintext, n, ciphertext, (unsigned int)seed);
+    free(ciphertext);
+}
 
-        printf("Plaintext Input:\n");
-        printf("%s\n", plaintext);
-        printf("Ciphertext Output (hex) with seed [%d]:\n", seed);
-        print_hex(ciphertext, n);
-
-        free(ciphertext);
-
-    } else if (strcmp(argv[1], "decrypt") == 0 && argc == 4) {
-        const char *ciphertext_hex = argv[2];
-        int seed = convert_to_seed_integer(argv[3]);
-        if (seed == -1) {
-            return 1;
-        }
-
-        unsigned char *ciphertext = hex_to_bytes(ciphertext_hex);
-        if (ciphertext == NULL) {
-            printf("Invalid hex ciphertext...\n\n");
-            explain_usage();
-            return 1;
-        }
-
-        size_t n = strlen(ciphertext_hex) / 2;
-        unsigned char *plaintext = malloc(n + 1);
-        if (plaintext == NULL) {
-            printf("Allocation error\n");
-            free(ciphertext);
-            return 1;
-        }
-
-        xor_stream_cipher(ciphertext, n, plaintext, (unsigned int)seed);
-        plaintext[n] = '\0';
-
-        printf("Ciphertext Input (hex):\n");
-        printf("%s\n", ciphertext_hex);
-        printf("Plaintext Output with seed [%d]:\n", seed);
-        printf("%s\n", plaintext);
-
-        free(ciphertext);
-        free(plaintext);
-
-    } else if (strcmp(argv[1], "demo") == 0 && argc == 2) {
-        reuse_seed_demo();
-
-    } else {
-        explain_usage();
-        return 1;
+void prngstream_decrypt_demo(const char *ciphertext_hex, int seed) {
+    unsigned char *ciphertext = prngstream_hex_to_bytes(ciphertext_hex);
+    if (ciphertext == NULL) {
+        printf("Invalid hex ciphertext...\n\n");
+        prngstream_explain_usage();
+        return;
     }
 
-    return 0;
+    size_t n = strlen(ciphertext_hex) / 2;
+    unsigned char *plaintext = malloc(n + 1);
+    if (plaintext == NULL) {
+        printf("Allocation error\n");
+        free(ciphertext);
+        return;
+    }
+
+    xor_stream_cipher(ciphertext, n, plaintext, (unsigned int)seed);
+    plaintext[n] = '\0';
+
+    printf("Ciphertext Input (hex):\n");
+    printf("%s\n", ciphertext_hex);
+    printf("Plaintext Output with seed [%d]:\n", seed);
+    printf("%s\n", plaintext);
+
+    free(ciphertext);
+    free(plaintext);
+}
+
+void prngstream_reuse_demo() {
+    reuse_seed_demo();
 }
